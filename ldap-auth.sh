@@ -216,7 +216,7 @@ fi
 ldap_auth
 
 # Overwrite parameters for actual authentication without bind_dn
-USERDN=$(echo "$output" | sed -n -e "s/^\(dn\|DN\)\s*:\s*\(uid.*\)$/\2/p")
+USERDN=$(echo "$output" | sed -n -e "s/^\(dn\|DN\)\s*::\s*\(.*\)$/\2/p")
 PW="$password"
 
 if [ -z "$USERDN" ]; then
