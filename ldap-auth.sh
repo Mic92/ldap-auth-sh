@@ -216,7 +216,12 @@ fi
 ldap_auth
 
 # Overwrite parameters for actual authentication without bind_dn
-USERDN=$(echo "$output" | sed -n -e "s/^\(dn\|DN\)\s*::\s*\(.*\)$/\2/p")
+if echo "$output" | grep -qE '^(dn|DN):: '; then
+    # ldapsearch base64 encodes non-ascii
+    USERDN=$(echo "$output" | sed -n -e "s/^\(dn\|DN\)\s*::\s*\(.*\)$/\2/p" | base64 -d)
+else
+    USERDN=$(echo "$output" | sed -n -e "s/^\(dn\|DN\)\s*:\s*\(.*\)$/\2/p")
+fi
 PW="$password"
 
 if [ -z "$USERDN" ]; then
