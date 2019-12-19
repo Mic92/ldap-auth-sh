@@ -122,7 +122,7 @@ ldap_dn_escape() {
 ldap_auth_curl() {
 	[ -z "$DEBUG" ] || verbose="-v"
 	attrs=$(echo "$ATTRS" | sed "s/ /,/g")
-	output=$(curl $verbose -s -m "$TIMEOUT" -u "$USERDN:$password" \
+	output=$(curl $verbose -s -m "$TIMEOUT" -u "$USERDN:$PW" \
 		"$SERVER/$BASEDN?dn,$attrs?$SCOPE?$FILTER")
 	[ $? -ne 0 ] && return 1
 	return 0
@@ -132,14 +132,31 @@ ldap_auth_ldapsearch() {
 	common_opts="-o nettimeout=$TIMEOUT -H $SERVER -x"
 	[ -z "$DEBUG" ] || common_opts="-v $common_opts"
 	if [ -z "$BASEDN" ]; then
-		output=$(ldapwhoami $common_opts -D "$USERDN" -w "$password")
+		output=$(ldapwhoami $common_opts -D "$USERDN" -w "$PW")
 	else
 		output=$(ldapsearch $common_opts -LLL \
-			-D "$USERDN" -w "$password" \
+			-D "$USERDN" -w "$PW" \
 			-s "$SCOPE" -b "$BASEDN" "$FILTER" dn $ATTRS)
 	fi
 	[ $? -ne 0 ] && return 1
 	return 0
+}
+
+ldap_auth() {
+	case "$CLIENT" in
+		"curl")
+			ldap_auth_curl
+			;;
+		"ldapsearch")
+			ldap_auth_ldapsearch
+			;;
+		*)
+			log "Unsupported client '$CLIENT', revise the configuration."
+			exit 2
+			;;
+	esac
+
+	return $?
 }
 
 
@@ -195,19 +212,20 @@ fi
 
 [ $err -ne 0 ] && exit 2
 
-# Do the authentication.
-case "$CLIENT" in
-	"curl")
-		ldap_auth_curl
-		;;
-	"ldapsearch")
-		ldap_auth_ldapsearch
-		;;
-	*)
-		log "Unsupported client '$CLIENT', revise the configuration."
-		exit 2
-		;;
-esac
+# Do authentication via bind_dn to get user_dn
+ldap_auth
+
+# Overwrite parameters for actual authentication without bind_dn
+USERDN=$(echo "$output" | sed -n -e "s/^\(dn\|DN\)\s*:\s*\(uid.*\)$/\2/p")
+PW="$password"
+
+if [ -z "$USERDN" ]; then
+	log "User '$username' could not be found."
+	exit 1
+fi
+
+# Actual user authentication
+ldap_auth
 
 result=$?
 
